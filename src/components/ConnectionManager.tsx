@@ -12,7 +12,7 @@ import {
 import { useTNClient } from '../contexts/TNClientProvider';
 
 const DEFAULT_PRIVATE_KEY = '0000000000000000000000000000000000000000000000000000000000000001';
-const DEFAULT_PROVIDER = 'http://localhost:5174/api';
+const DEFAULT_PROVIDER = 'https://gateway.mainnet.truf.network';
 const DEFAULT_CHAIN_ID = 'tn-v2';
 
 export const ConnectionManager = () => {
