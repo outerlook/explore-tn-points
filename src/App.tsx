@@ -460,27 +460,23 @@ function App() {
                   <ResultsTable data={queryData} />
                 )}
                 {activeView === 'explorer' && streamLocator && (
-                  explorerData.isLoading ? (
-                    <Box sx={{ height: '80vh', border: '1px solid #ddd', borderRadius: '4px' }}>
-                      <LoadingOverlay progress={explorerData.progress} />
-                    </Box>
-                  ) : explorerData.error ? (
-                    <Alert severity="error">{explorerData.error.message}</Alert>
-                  ) : (
-                    <Box>
-                      <ExplorePointView
-                        nodes={explorerData.nodes}
-                        edges={explorerData.edges}
-                        onBack={() => setActiveView('query')}
-                      />
+                  <Box>
+                    <ExplorePointView
+                      nodes={explorerData.nodes}
+                      edges={explorerData.edges}
+                      onBack={() => setActiveView('query')}
+                      isLoading={explorerData.isLoading}
+                      progress={explorerData.progress}
+                    />
+                    {!explorerData.isLoading && (
                       <Box sx={{ mt: 2 }}>
                         <TimelineContainer
                           data={explorerData.timelineData}
                           targetTime={exploreParams!.to!}
                         />
                       </Box>
-                    </Box>
-                  )
+                    )}
+                  </Box>
                 )}
                 {(queryIsLoading && activeView === 'query') && (
                   <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />
