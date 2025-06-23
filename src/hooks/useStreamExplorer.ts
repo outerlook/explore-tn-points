@@ -1,0 +1,108 @@
+import { useState, useEffect } from 'react';
+import { useTNClient } from '../contexts/TNClientProvider';
+import type { StreamLocator } from '@trufnetwork/sdk-js';
+import type { Node, Edge } from 'reactflow';
+import pLimit from 'p-limit';
+import type { QueryMode } from '../components/QueryForm';
+import type { StreamNodeData } from '../components/StreamNode';
+import type { TimelineData } from '../components/TimelineContainer';
+
+interface UseStreamExplorerProps {
+  streamLocator: StreamLocator | null;
+  targetTime: number;
+  level: number;
+  mode: QueryMode;
+  baseTime?: number;
+  timeInterval?: number;
+}
+
+const getFlowNodeId = (locator: StreamLocator) => 
+  `${locator.streamId.getId()}-${locator.dataProvider.getAddress()}`;
+
+export const useStreamExplorer = ({
+  streamLocator,
+  targetTime,
+  level,
+  mode,
+  baseTime,
+  timeInterval,
+}: UseStreamExplorerProps) => {
+  const { client } = useTNClient();
+
+  const [nodes, setNodes] = useState<Node<StreamNodeData>[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const [timelineData, setTimelineData] = useState<TimelineData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!client || !streamLocator) return;
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      setNodes([]);
+      setEdges([]);
+      setTimelineData(null);
+
+      const limit = pLimit(5);
+      const processedNodes = new Set<string>();
+      const allStreams: {locator: StreamLocator, weight?: string}[] = [];
+
+      const traverse = async (locator: StreamLocator, currentLevel: number, parentFlowId?: string, weight?: string, childIndex?: number) => {
+        const flowId = getFlowNodeId(locator);
+        allStreams.push({ locator, weight });
+
+        // Graph data
+        if (processedNodes.has(flowId) || currentLevel < 0) {
+            if(parentFlowId) setEdges((eds) => [...eds, { id: `e-${parentFlowId}-${flowId}-${childIndex ?? 0}`, source: parentFlowId, target: flowId, animated: true }]);
+            return;
+        }
+        processedNodes.add(flowId);
+
+        try {
+          const streamAction = client.loadAction();
+          const [type, record, taxonomy] = await Promise.all([
+            limit(() => streamAction.getType(locator)),
+            limit(() => streamAction.getRecord({ stream: locator, to: targetTime, from: targetTime })),
+            limit(() => client.loadComposedAction().describeTaxonomies({ stream: locator, latestGroupSequence: true }).catch(() => null)),
+          ]);
+
+          const nodeData: StreamNodeData = { id: locator.streamId.getName() || locator.streamId.getId(), streamId: locator.streamId.getId(), provider: locator.dataProvider.getAddress(), type, value: record?.[0]?.value, eventTime: record?.[0]?.eventTime, isTarget: currentLevel === level, weight };
+          setNodes((nds) => [...nds, { id: flowId, type: 'streamNode', data: nodeData, position: { x: 0, y: 0 } }]);
+          if (parentFlowId) setEdges((eds) => [...eds, { id: `e-${parentFlowId}-${flowId}-${childIndex ?? 0}`, source: parentFlowId, target: flowId }]);
+
+          const childItems = taxonomy?.[0]?.taxonomyItems || [];
+          if (type === 'composed' && currentLevel > 0 && childItems.length > 0) {
+            await Promise.all(childItems.map((item, index) => traverse(item.childStream, currentLevel - 1, flowId, item.weight, index)));
+          }
+        } catch (e) {
+          setError(e instanceof Error ? e : new Error('An unknown error occurred'));
+        }
+      };
+
+      await traverse(streamLocator, level);
+      
+      // Fetch timeline data
+      const from = targetTime - 3600;
+      const to = targetTime + 3600;
+      const streamAction = client.loadAction();
+
+      const timelineRecords = await Promise.all(
+        allStreams.map(s => limit(() => streamAction.getRecord({ stream: s.locator, from, to })))
+      );
+      
+      setTimelineData({
+          parent: { locator: streamLocator, records: timelineRecords[0] },
+          children: allStreams.slice(1).map((s, i) => ({...s, locator: s.locator, records: timelineRecords[i+1]}))
+      });
+
+
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, [client, streamLocator, targetTime, level, mode, baseTime, timeInterval]);
+
+  return { nodes, edges, timelineData, isLoading, error };
+}; 

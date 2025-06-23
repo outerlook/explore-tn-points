@@ -14,14 +14,24 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  IconButton,
+  Menu,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { Routes, Route, useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { ConnectionManager } from './components/ConnectionManager';
 import { QueryForm } from './components/QueryForm';
 import { ResultsTable } from './components/ResultsTable';
 import { ExplorePointView } from './components/ExplorePointView';
+import { TimelineContainer } from './components/TimelineContainer';
 import type { QueryParams, QueryMode } from './components/QueryForm';
 import { useStreamQuery } from './hooks/useStreamQuery';
+import { useStreamExplorer } from './hooks/useStreamExplorer';
+import { StreamId, EthereumAddress } from '@trufnetwork/sdk-js';
+import { type StreamLocator } from '@trufnetwork/sdk-js';
 
 const theme = createTheme({
   palette: {
@@ -128,10 +138,47 @@ const ExploreView = () => {
     const baseTime = searchParams.get('baseTime');
     const timeInterval = searchParams.get('timeInterval');
 
+    const [view, setView] = useState<'graph' | 'timeline'>('graph');
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
     const [editableMode, setEditableMode] = useState(mode);
     const [editableEventTime, setEditableEventTime] = useState(eventTime || '');
     const [editableBaseTime, setEditableBaseTime] = useState(baseTime || '');
     const [editableTimeInterval, setEditableTimeInterval] = useState(timeInterval || '');
+
+    const [streamLocator, setStreamLocator] = useState<StreamLocator | null>(null);
+
+    useEffect(() => {
+        const initLocator = async () => {
+            if (!streamId || !dataProvider) return;
+            try {
+                const id = StreamId.fromString(streamId).getRight();
+                if (!id) {
+                    throw new Error('Invalid stream ID');
+                }
+                const provider = new EthereumAddress(dataProvider);
+                setStreamLocator({ streamId: id, dataProvider: provider });
+            } catch (e) {
+                console.error(e)
+            }
+        }
+        initLocator();
+    }, [streamId, dataProvider]);
+
+    const {
+        nodes,
+        edges,
+        timelineData,
+        isLoading,
+        error
+    } = useStreamExplorer({
+        streamLocator,
+        targetTime: Number(eventTime),
+        level: 4, // or some other logic for level
+        mode: mode as QueryMode,
+        baseTime: baseTime ? Number(baseTime) : undefined,
+        timeInterval: timeInterval ? Number(timeInterval) : undefined,
+    });
 
     useEffect(() => {
       setEditableMode(mode);
@@ -169,7 +216,32 @@ const ExploreView = () => {
           <Paper sx={{ p: 2, height: 'fit-content' }}>
             <ConnectionManager />
             <Box sx={{ mt: 2 }}>
-              <Typography variant="h6">Exploring Stream</Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6">Exploring Stream</Typography>
+                <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
+                  <SettingsIcon />
+                </IconButton>
+              </Box>
+
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={() => setAnchorEl(null)}
+              >
+                <Box sx={{ px: 2, py: 1 }}>
+                  <Typography variant="subtitle2">Layout</Typography>
+                  <RadioGroup
+                    value={view}
+                    onChange={(e) => {
+                      setView(e.target.value as 'graph' | 'timeline');
+                      setAnchorEl(null);
+                    }}
+                  >
+                    <FormControlLabel value="graph" control={<Radio />} label="Dependency Graph" />
+                    <FormControlLabel value="timeline" control={<Radio />} label="Composition Timeline" />
+                  </RadioGroup>
+                </Box>
+              </Menu>
 
               <FormControl size="small" fullWidth sx={{ mt: 2 }}>
                 <InputLabel>Query Mode</InputLabel>
@@ -243,15 +315,23 @@ const ExploreView = () => {
           </Paper>
         </Box>
         <Box sx={{ flex: 1 }}>
-          <ExplorePointView
-            streamId={streamId}
-            dataProvider={dataProvider}
-            eventTime={Number(eventTime)}
-            mode={mode}
-            baseTime={baseTime ? Number(baseTime) : undefined}
-            timeInterval={timeInterval ? Number(timeInterval) : undefined}
-            onBack={() => navigate(-1)}
-          />
+          {isLoading && <Typography>Loading...</Typography>}
+          {error && <Alert severity="error">{error.message}</Alert>}
+          {!isLoading && !error && (
+            <>
+              {view === 'graph' ? (
+                <ExplorePointView
+                  nodes={nodes}
+                  edges={edges}
+                  onBack={() => navigate(-1)}
+                />
+              ) : (
+                <TimelineContainer
+                  data={timelineData}
+                />
+              )}
+            </>
+          )}
         </Box>
       </Box>
     );
