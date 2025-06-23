@@ -34,16 +34,22 @@ export const useStreamExplorer = ({
   const [timelineData, setTimelineData] = useState<TimelineData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalDiscovered, setTotalDiscovered] = useState(0);
+  const [loadingStatus, setLoadingStatus] = useState<'traversing' | 'fetching_timeline' | 'done'>('traversing');
 
   useEffect(() => {
     if (!client || !streamLocator) return;
 
     const fetchData = async () => {
       setIsLoading(true);
+      setLoadingStatus('traversing');
       setError(null);
       setNodes([]);
       setEdges([]);
       setTimelineData(null);
+      setProcessedCount(0);
+      setTotalDiscovered(0);
 
       const limit = pLimit(5);
       const processedNodes = new Set<string>();
@@ -72,6 +78,8 @@ export const useStreamExplorer = ({
           setNodes((nds) => [...nds, { id: flowId, type: 'streamNode', data: nodeData, position: { x: 0, y: 0 } }]);
           if (parentFlowId) setEdges((eds) => [...eds, { id: `e-${parentFlowId}-${flowId}-${childIndex ?? 0}`, source: parentFlowId, target: flowId }]);
 
+          setProcessedCount((c) => c + 1);
+
           const childItems = taxonomy?.[0]?.taxonomyItems || [];
           if (type === 'composed' && currentLevel > 0 && childItems.length > 0) {
             await Promise.all(childItems.map((item, index) => traverse(item.childStream, currentLevel - 1, flowId, item.weight, index)));
@@ -83,6 +91,9 @@ export const useStreamExplorer = ({
 
       await traverse(streamLocator, level);
       
+      setTotalDiscovered(allStreams.length);
+      setLoadingStatus('fetching_timeline');
+
       // Fetch timeline data
       const streamAction = client.loadAction();
 
@@ -99,12 +110,12 @@ export const useStreamExplorer = ({
           streams: timelineStreams,
       });
 
-
       setIsLoading(false);
+      setLoadingStatus('done');
     };
 
     fetchData();
   }, [client, streamLocator, targetTime, level, mode, baseTime, timeInterval]);
 
-  return { nodes, edges, timelineData, isLoading, error };
+  return { nodes, edges, timelineData, isLoading, error, processedCount, totalDiscovered, loadingStatus };
 }; 

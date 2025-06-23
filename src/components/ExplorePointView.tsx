@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Box, Button, CircularProgress } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import ReactFlow, { 
     Controls, 
     MiniMap, 
@@ -70,7 +70,13 @@ export const ExplorePointView = ({ nodes: initialNodes, edges: initialEdges, onB
   const [edges, , onEdgesChange] = useEdgesState(layoutedEdges);
 
   if (initialNodes.length === 0) {
-    return <CircularProgress />
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <Typography variant="h6" color="text.secondary">
+          No stream composition to display.
+        </Typography>
+      </Box>
+    );
   }
 
   return (

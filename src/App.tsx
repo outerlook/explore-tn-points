@@ -171,7 +171,10 @@ const ExploreView = () => {
         edges,
         timelineData,
         isLoading,
-        error
+        error,
+        processedCount,
+        totalDiscovered,
+        loadingStatus
     } = useStreamExplorer({
         streamLocator,
         targetTime: Number(eventTime),
@@ -321,12 +324,20 @@ const ExploreView = () => {
         </Box>
         <Box sx={{ flex: 1 }}>
           {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+            <Paper sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
               <CircularProgress />
-            </Box>
+              <Typography variant="h6" sx={{ mt: 2 }}>
+                {loadingStatus === 'traversing' ? 'Discovering Stream Composition...' : 'Fetching Timeline Data...'}
+              </Typography>
+              <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+                {loadingStatus === 'traversing'
+                  ? `${processedCount} streams found so far.`
+                  : `${totalDiscovered} streams found. Now fetching records.`}
+              </Typography>
+            </Paper>
           ) : error ? (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error instanceof Error ? error.message : 'An unknown error occurred.'}
+              {error.message}
             </Alert>
           ) : (
             <>
@@ -338,10 +349,7 @@ const ExploreView = () => {
                 />
               )}
               {view === 'timeline' && (
-                <TimelineContainer
-                  data={timelineData}
-                  targetTime={Number(eventTime)}
-                />
+                <TimelineContainer data={timelineData} targetTime={Number(eventTime)} />
               )}
             </>
           )}
