@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ThemeProvider,
   createTheme,
@@ -8,6 +8,12 @@ import {
   Box,
   Typography,
   Alert,
+  TextField,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { Routes, Route, useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { ConnectionManager } from './components/ConnectionManager';
@@ -116,11 +122,42 @@ const QueryView = () => {
 const ExploreView = () => {
     const navigate = useNavigate();
     const { dataProvider, streamId } = useParams<{ dataProvider: string; streamId: string }>();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const eventTime = searchParams.get('eventTime');
     const mode = searchParams.get('mode') as QueryMode | undefined;
     const baseTime = searchParams.get('baseTime');
     const timeInterval = searchParams.get('timeInterval');
+
+    const [editableMode, setEditableMode] = useState(mode);
+    const [editableEventTime, setEditableEventTime] = useState(eventTime || '');
+    const [editableBaseTime, setEditableBaseTime] = useState(baseTime || '');
+    const [editableTimeInterval, setEditableTimeInterval] = useState(timeInterval || '');
+
+    useEffect(() => {
+      setEditableMode(mode);
+      setEditableEventTime(eventTime || '');
+      setEditableBaseTime(baseTime || '');
+      setEditableTimeInterval(timeInterval || '');
+    }, [mode, eventTime, baseTime, timeInterval]);
+
+    const handleUpdateParams = () => {
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set('eventTime', editableEventTime);
+      newSearchParams.set('mode', editableMode as string);
+
+      if (editableMode === 'getIndex') {
+        newSearchParams.set('baseTime', editableBaseTime);
+        newSearchParams.delete('timeInterval');
+      } else if (editableMode === 'getIndexChange') {
+        newSearchParams.set('timeInterval', editableTimeInterval);
+        newSearchParams.delete('baseTime');
+      } else {
+        newSearchParams.delete('baseTime');
+        newSearchParams.delete('timeInterval');
+      }
+
+      setSearchParams(newSearchParams);
+    };
   
     if (!dataProvider || !streamId || !eventTime || !mode) {
       return <Alert severity="error">Missing required parameters for exploration.</Alert>;
@@ -133,25 +170,75 @@ const ExploreView = () => {
             <ConnectionManager />
             <Box sx={{ mt: 2 }}>
               <Typography variant="h6">Exploring Stream</Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                <strong>ID:</strong> {streamId}
-              </Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                <strong>Provider:</strong> {dataProvider}
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
-                <strong>Mode:</strong> {mode}
-              </Typography>
-              {mode === 'getIndex' && baseTime && (
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  <strong>Base Time:</strong> {new Date(Number(baseTime) * 1000).toISOString()}
+
+              <FormControl size="small" fullWidth sx={{ mt: 2 }}>
+                <InputLabel>Query Mode</InputLabel>
+                <Select
+                  value={editableMode}
+                  label="Query Mode"
+                  onChange={(e) => setEditableMode(e.target.value as QueryMode)}
+                >
+                  <MenuItem value="getRecord">Get Record</MenuItem>
+                  <MenuItem value="getIndex">Get Index</MenuItem>
+                  <MenuItem value="getIndexChange">Get Index Change</MenuItem>
+                </Select>
+              </FormControl>
+
+              <Box sx={{ my: 2 }}>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                  <strong>ID:</strong> {streamId}
                 </Typography>
-              )}
-              {mode === 'getIndexChange' && timeInterval && (
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  <strong>Interval:</strong> {timeInterval}s
+                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                  <strong>Provider:</strong> {dataProvider}
                 </Typography>
-              )}
+                <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+                  <strong>Mode:</strong> {mode}
+                </Typography>
+                {mode === 'getIndex' && baseTime && (
+                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                    <strong>Base Time:</strong> {new Date(Number(baseTime) * 1000).toISOString()}
+                  </Typography>
+                )}
+                {mode === 'getIndexChange' && timeInterval && (
+                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                    <strong>Interval:</strong> {timeInterval}s
+                  </Typography>
+                )}
+              </Box>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <TextField
+                  label="Event Time (Unix)"
+                  size="small"
+                  variant="outlined"
+                  value={editableEventTime}
+                  onChange={(e) => setEditableEventTime(e.target.value)}
+                  fullWidth
+                />
+                {editableMode === 'getIndex' && (
+                  <TextField
+                    label="Base Time (Unix)"
+                    size="small"
+                    variant="outlined"
+                    value={editableBaseTime}
+                    onChange={(e) => setEditableBaseTime(e.target.value)}
+                    fullWidth
+                  />
+                )}
+                {editableMode === 'getIndexChange' && (
+                  <TextField
+                    label="Time Interval (s)"
+                    size="small"
+                    variant="outlined"
+                    value={editableTimeInterval}
+                    onChange={(e) => setEditableTimeInterval(e.target.value)}
+                    fullWidth
+                  />
+                )}
+                <Button variant="contained" onClick={handleUpdateParams} size="small">
+                  Refetch
+                </Button>
+              </Box>
             </Box>
           </Paper>
         </Box>
@@ -176,7 +263,7 @@ function App() {
       <CssBaseline />
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
-          TSN Explorer
+          TRUF.Network Values Explorer
         </Typography>
         <Typography variant="subtitle1" gutterBottom align="center" sx={{ mb: 4 }}>
           Debug and explore Truf Network streams and their compositions

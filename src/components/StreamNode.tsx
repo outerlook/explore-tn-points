@@ -45,7 +45,18 @@ export const StreamNode: React.FC<StreamNodeProps> = ({ data }) => {
   const explorerUrl = `https://truf.network/explorer/${data.provider}/${data.streamId}`;
 
   return (
-    <Link href={explorerUrl} target="_blank" rel="noopener noreferrer" sx={{ textDecoration: 'none' }}>
+    <Link 
+      href={explorerUrl} 
+      target="_blank" 
+      rel="noopener noreferrer" 
+      sx={{ 
+        textDecoration: 'none', 
+        cursor: 'default',
+        '&:hover .node-title': {
+          textDecoration: 'underline',
+        }
+      }}
+    >
       <Tooltip title={tooltipContent} arrow>
         <Paper
           variant="outlined"
@@ -59,10 +70,15 @@ export const StreamNode: React.FC<StreamNodeProps> = ({ data }) => {
             flexDirection: 'column',
             justifyContent: 'center',
             position: 'relative', // Needed for absolute positioning of the avatar
+            cursor: 'pointer',
+            transition: 'box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1) 0ms',
+            '&:hover': {
+              boxShadow: '0 4px 20px 0 rgba(0,0,0,0.12)',
+            }
           }}
         >
           {/* Handle for incoming connections */}
-          <Handle type="target" position={Position.Top} />
+          <Handle type="target" position={Position.Left} />
 
           <Box
             sx={{
@@ -76,7 +92,7 @@ export const StreamNode: React.FC<StreamNodeProps> = ({ data }) => {
             <Blockies seed={data.provider.toLowerCase()} size={6} scale={4} />
           </Box>
 
-          <Typography noWrap title={data.id} sx={{ fontWeight: 'bold', mb: 0.5, maxWidth: '90%' }}>
+          <Typography noWrap title={data.id} sx={{ fontWeight: 'bold', mb: 0.5, maxWidth: '90%' }} className="node-title">
             {data.id}
           </Typography>
 
@@ -107,7 +123,7 @@ export const StreamNode: React.FC<StreamNodeProps> = ({ data }) => {
           )}
 
           {/* Handle for outgoing connections */}
-          <Handle type="source" position={Position.Bottom} />
+          <Handle type="source" position={Position.Right} />
         </Paper>
       </Tooltip>
     </Link>
