@@ -138,6 +138,7 @@ const ExploreView = () => {
     const mode = searchParams.get('mode') as QueryMode | undefined;
     const baseTime = searchParams.get('baseTime');
     const timeInterval = searchParams.get('timeInterval');
+    const maxDepth = searchParams.get('maxDepth') ? Number(searchParams.get('maxDepth')) : 2;
 
     const [view, setView] = useState<'graph' | 'timeline'>('graph');
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -146,6 +147,7 @@ const ExploreView = () => {
     const [editableEventTime, setEditableEventTime] = useState(eventTime || '');
     const [editableBaseTime, setEditableBaseTime] = useState(baseTime || '');
     const [editableTimeInterval, setEditableTimeInterval] = useState(timeInterval || '');
+    const [editableMaxDepth, setEditableMaxDepth] = useState(String(maxDepth));
 
     const [streamLocator, setStreamLocator] = useState<StreamLocator | null>(null);
 
@@ -178,7 +180,7 @@ const ExploreView = () => {
     } = useStreamExplorer({
         streamLocator,
         targetTime: Number(eventTime),
-        level: 4, // or some other logic for level
+        level: maxDepth,
         mode: mode as QueryMode,
         baseTime: baseTime ? Number(baseTime) : undefined,
         timeInterval: timeInterval ? Number(timeInterval) : undefined,
@@ -189,12 +191,14 @@ const ExploreView = () => {
       setEditableEventTime(eventTime || '');
       setEditableBaseTime(baseTime || '');
       setEditableTimeInterval(timeInterval || '');
-    }, [mode, eventTime, baseTime, timeInterval]);
+      setEditableMaxDepth(String(maxDepth));
+    }, [mode, eventTime, baseTime, timeInterval, maxDepth]);
 
     const handleUpdateParams = () => {
       const newSearchParams = new URLSearchParams(searchParams);
       newSearchParams.set('eventTime', editableEventTime);
       newSearchParams.set('mode', editableMode as string);
+      newSearchParams.set('maxDepth', editableMaxDepth);
 
       if (editableMode === 'getIndex') {
         newSearchParams.set('baseTime', editableBaseTime);
@@ -236,89 +240,70 @@ const ExploreView = () => {
                 open={Boolean(anchorEl)}
                 onClose={() => setAnchorEl(null)}
               >
-                <Box sx={{ px: 2, py: 1 }}>
-                  <Typography variant="subtitle2">Layout</Typography>
-                  <RadioGroup
-                    value={view}
-                    onChange={(e) => {
-                      setView(e.target.value as 'graph' | 'timeline');
-                      setAnchorEl(null);
-                    }}
-                  >
-                    <FormControlLabel value="graph" control={<Radio />} label="Dependency Graph" />
-                    <FormControlLabel value="timeline" control={<Radio />} label="Composition Timeline" />
+                <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 300 }}>
+                  <Typography variant="subtitle2">View Options</Typography>
+                  <RadioGroup row value={view} onChange={(e) => setView(e.target.value as 'graph' | 'timeline')}>
+                    <FormControlLabel value="graph" control={<Radio />} label="Graph View" />
+                    <FormControlLabel value="timeline" control={<Radio />} label="Timeline View" />
                   </RadioGroup>
+
+                  <Typography variant="subtitle2" sx={{ mt: 1 }}>Query Parameters</Typography>
+                  <TextField
+                    label="Event Time"
+                    value={editableEventTime}
+                    onChange={(e) => setEditableEventTime(e.target.value)}
+                    size="small"
+                    fullWidth
+                    type="number"
+                  />
+                  <FormControl size="small" fullWidth>
+                    <InputLabel>Query Mode</InputLabel>
+                    <Select
+                      value={editableMode}
+                      label="Query Mode"
+                      onChange={(e) => setEditableMode(e.target.value as QueryMode)}
+                    >
+                      <MenuItem value="getRecord">Get Record</MenuItem>
+                      <MenuItem value="getIndex">Get Index</MenuItem>
+                      <MenuItem value="getIndexChange">Get Index Change</MenuItem>
+                    </Select>
+                  </FormControl>
+                  
+                  {editableMode === 'getIndex' && (
+                    <TextField
+                      label="Base Time"
+                      value={editableBaseTime}
+                      onChange={(e) => setEditableBaseTime(e.target.value)}
+                      size="small"
+                      fullWidth
+                      type="number"
+                    />
+                  )}
+                  {editableMode === 'getIndexChange' && (
+                    <TextField
+                      label="Time Interval (seconds)"
+                      value={editableTimeInterval}
+                      onChange={(e) => setEditableTimeInterval(e.target.value)}
+                      size="small"
+                      fullWidth
+                      type="number"
+                    />
+                  )}
+
+                  <TextField
+                    label="Max Depth"
+                    type="number"
+                    value={editableMaxDepth}
+                    onChange={(e) => setEditableMaxDepth(e.target.value)}
+                    size="small"
+                    fullWidth
+                    InputProps={{ inputProps: { min: 0, max: 10 } }}
+                    helperText="How many levels of child streams to explore."
+                  />
+
+                  <Button onClick={handleUpdateParams} variant="contained" size="small">Update</Button>
                 </Box>
               </Menu>
-
-              <FormControl size="small" fullWidth sx={{ mt: 2 }}>
-                <InputLabel>Query Mode</InputLabel>
-                <Select
-                  value={editableMode}
-                  label="Query Mode"
-                  onChange={(e) => setEditableMode(e.target.value as QueryMode)}
-                >
-                  <MenuItem value="getRecord">Get Record</MenuItem>
-                  <MenuItem value="getIndex">Get Index</MenuItem>
-                  <MenuItem value="getIndexChange">Get Index Change</MenuItem>
-                </Select>
-              </FormControl>
-
-              <Box sx={{ my: 2 }}>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                  <strong>ID:</strong> {streamId}
-                </Typography>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                  <strong>Provider:</strong> {dataProvider}
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
-                  <strong>Mode:</strong> {mode}
-                </Typography>
-                {mode === 'getIndex' && baseTime && (
-                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                    <strong>Base Time:</strong> {new Date(Number(baseTime) * 1000).toISOString()}
-                  </Typography>
-                )}
-                {mode === 'getIndexChange' && timeInterval && (
-                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                    <strong>Interval:</strong> {timeInterval}s
-                  </Typography>
-                )}
-              </Box>
-
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
-                  label="Event Time (Unix)"
-                  size="small"
-                  variant="outlined"
-                  value={editableEventTime}
-                  onChange={(e) => setEditableEventTime(e.target.value)}
-                  fullWidth
-                />
-                {editableMode === 'getIndex' && (
-                  <TextField
-                    label="Base Time (Unix)"
-                    size="small"
-                    variant="outlined"
-                    value={editableBaseTime}
-                    onChange={(e) => setEditableBaseTime(e.target.value)}
-                    fullWidth
-                  />
-                )}
-                {editableMode === 'getIndexChange' && (
-                  <TextField
-                    label="Time Interval (s)"
-                    size="small"
-                    variant="outlined"
-                    value={editableTimeInterval}
-                    onChange={(e) => setEditableTimeInterval(e.target.value)}
-                    fullWidth
-                  />
-                )}
-                <Button variant="contained" onClick={handleUpdateParams} size="small">
-                  Refetch
-                </Button>
-              </Box>
             </Box>
           </Paper>
         </Box>
