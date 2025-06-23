@@ -53,5 +53,9 @@
 
 .vis-custom-time {
     opacity: 0.3;
+    pointer-events: none;
 }
 
+.vis-inner > a:hover {
+  text-decoration: underline !important;
+}
