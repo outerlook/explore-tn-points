@@ -5,7 +5,7 @@ import type { Node, Edge } from 'reactflow';
 import pLimit from 'p-limit';
 import type { QueryMode } from '../components/QueryForm';
 import type { StreamNodeData } from '../components/StreamNode';
-import type { TimelineData } from '../components/TimelineContainer';
+import type { TimelineData, TimelineStream } from '../components/TimelineContainer';
 
 interface UseStreamExplorerProps {
   streamLocator: StreamLocator | null;
@@ -14,6 +14,13 @@ interface UseStreamExplorerProps {
   mode: QueryMode;
   baseTime?: number;
   timeInterval?: number;
+}
+
+export interface LoadingProgress {
+  stage: 'discovering' | 'timeline' | 'done';
+  discovered: number;
+  timelineFetched: number;
+  total: number;
 }
 
 const getFlowNodeId = (locator: StreamLocator) => 
@@ -34,6 +41,7 @@ export const useStreamExplorer = ({
   const [timelineData, setTimelineData] = useState<TimelineData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [progress, setProgress] = useState<LoadingProgress>({ stage: 'discovering', discovered: 0, timelineFetched: 0, total: 0 });
 
   useEffect(() => {
     if (!client || !streamLocator) return;
@@ -44,14 +52,16 @@ export const useStreamExplorer = ({
       setNodes([]);
       setEdges([]);
       setTimelineData(null);
+      setProgress({ stage: 'discovering', discovered: 0, timelineFetched: 0, total: 0 });
 
       const limit = pLimit(5);
       const processedNodes = new Set<string>();
-      const allStreams: {locator: StreamLocator, weight?: string}[] = [];
+      const allStreams: Omit<TimelineStream, 'records'>[] = [];
 
       const traverse = async (locator: StreamLocator, currentLevel: number, parentFlowId?: string, weight?: string, childIndex?: number) => {
         const flowId = getFlowNodeId(locator);
-        allStreams.push({ locator, weight });
+        allStreams.push({ locator, weight, parentFlowId, flowId });
+        setProgress(p => ({ ...p, discovered: allStreams.length }));
 
         // Graph data
         if (processedNodes.has(flowId) || currentLevel < 0) {
@@ -64,7 +74,7 @@ export const useStreamExplorer = ({
           const streamAction = client.loadAction();
           const [type, record, taxonomy] = await Promise.all([
             limit(() => streamAction.getType(locator)),
-            limit(() => streamAction.getRecord({ stream: locator, to: targetTime, from: targetTime })),
+            limit(() => streamAction.getRecord({ stream: locator, from: targetTime, to: targetTime })),
             limit(() => client.loadComposedAction().describeTaxonomies({ stream: locator, latestGroupSequence: true }).catch(() => null)),
           ]);
 
@@ -83,26 +93,35 @@ export const useStreamExplorer = ({
 
       await traverse(streamLocator, level);
       
-      // Fetch timeline data
-      const from = targetTime - 3600;
-      const to = targetTime + 3600;
+      setProgress(p => ({ ...p, stage: 'timeline', total: allStreams.length }));
+      
       const streamAction = client.loadAction();
 
+      let timelineFetchedCount = 0;
       const timelineRecords = await Promise.all(
-        allStreams.map(s => limit(() => streamAction.getRecord({ stream: s.locator, from, to })))
+        allStreams.map(s => limit(async () => {
+          const records = await streamAction.getRecord({ stream: s.locator, from: targetTime, to: targetTime });
+          timelineFetchedCount++;
+          setProgress(p => ({ ...p, timelineFetched: timelineFetchedCount }));
+          return records;
+        }))
       );
       
+      const timelineStreams: TimelineStream[] = allStreams.map((s, i) => ({
+        ...s,
+        records: timelineRecords[i],
+      }));
+
       setTimelineData({
-          parent: { locator: streamLocator, records: timelineRecords[0] },
-          children: allStreams.slice(1).map((s, i) => ({...s, locator: s.locator, records: timelineRecords[i+1]}))
+          streams: timelineStreams,
       });
 
-
+      setProgress(p => ({ ...p, stage: 'done' }));
       setIsLoading(false);
     };
 
     fetchData();
   }, [client, streamLocator, targetTime, level, mode, baseTime, timeInterval]);
 
-  return { nodes, edges, timelineData, isLoading, error };
+  return { nodes, edges, timelineData, isLoading, error, progress };
 }; 

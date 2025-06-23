@@ -1,0 +1,57 @@
+/* Styles for nested group backgrounds and indentation */
+.vis-timeline .vis-left .vis-labelset .vis-label.group-depth-0 {
+    background: #f0f7ff;
+    font-weight: 600;
+}
+
+.vis-timeline .vis-left .vis-labelset .vis-label.group-depth-1 {
+    background: #fff8f0;
+}
+
+.vis-timeline .vis-left .vis-labelset .vis-label.group-depth-2 {
+    background: #f0fff7;
+}
+
+.vis-timeline .vis-left .vis-labelset .vis-label.group-depth-3 {
+    background: #f8f0ff;
+}
+
+/* General style for all labels to ensure they fill the space */
+.vis-timeline .vis-left .vis-labelset .vis-label {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+/* Make points into dots */
+.vis-item.vis-dot {
+    visibility: hidden;
+}
+
+
+
+/* Styles for timeline points based on depth */
+.vis-item.item-depth-0 {
+    background-color: #6ab7ff !important;
+    border-color: #4a9fdd;
+}
+
+.vis-item.item-depth-1 {
+    background-color: #ffbe6a !important;
+    border-color: #e6a24d;
+}
+
+.vis-item.item-depth-2 {
+    background-color: #6affab !important;
+    border-color: #4ddda2;
+}
+
+.vis-item.item-depth-3 {
+    background-color: #be6aff !important;
+    border-color: #a24dde;
+} 
+
+.vis-custom-time {
+    opacity: 0.3;
+}
+

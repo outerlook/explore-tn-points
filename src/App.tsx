@@ -19,19 +19,25 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  CircularProgress,
+  Grid,
+  LinearProgress,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { Routes, Route, useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { ConnectionManager } from './components/ConnectionManager';
-import { QueryForm } from './components/QueryForm';
+import { QueryForm, type QueryParams } from './components/QueryForm';
 import { ResultsTable } from './components/ResultsTable';
 import { ExplorePointView } from './components/ExplorePointView';
 import { TimelineContainer } from './components/TimelineContainer';
-import type { QueryParams, QueryMode } from './components/QueryForm';
+import { LoadingOverlay } from './components/LoadingOverlay';
 import { useStreamQuery } from './hooks/useStreamQuery';
-import { useStreamExplorer } from './hooks/useStreamExplorer';
-import { StreamId, EthereumAddress } from '@trufnetwork/sdk-js';
-import { type StreamLocator } from '@trufnetwork/sdk-js';
+import { useStreamExplorer, type LoadingProgress } from './hooks/useStreamExplorer';
+import { StreamId, EthereumAddress, type StreamLocator } from '@trufnetwork/sdk-js';
+import { type QueryMode } from './components/QueryForm';
+import { useStreamExplorerData } from './hooks/useStreamExplorerData';
+import { TNClientProvider } from './contexts/TNClientProvider';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const theme = createTheme({
   palette: {
@@ -44,6 +50,8 @@ const theme = createTheme({
     },
   },
 });
+
+const queryClient = new QueryClient();
 
 const QueryView = () => {
   const navigate = useNavigate();
@@ -206,6 +214,10 @@ const ExploreView = () => {
       setSearchParams(newSearchParams);
     };
   
+    const handleBackToQuery = () => {
+      navigate(`/?${searchParams.toString()}`);
+    }
+
     if (!dataProvider || !streamId || !eventTime || !mode) {
       return <Alert severity="error">Missing required parameters for exploration.</Alert>;
     }
@@ -315,19 +327,27 @@ const ExploreView = () => {
           </Paper>
         </Box>
         <Box sx={{ flex: 1 }}>
-          {isLoading && <Typography>Loading...</Typography>}
-          {error && <Alert severity="error">{error.message}</Alert>}
-          {!isLoading && !error && (
+          {isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+              <CircularProgress />
+            </Box>
+          ) : error ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error instanceof Error ? error.message : 'An unknown error occurred.'}
+            </Alert>
+          ) : (
             <>
-              {view === 'graph' ? (
+              {view === 'graph' && (
                 <ExplorePointView
                   nodes={nodes}
                   edges={edges}
-                  onBack={() => navigate(-1)}
+                  onBack={handleBackToQuery}
                 />
-              ) : (
+              )}
+              {view === 'timeline' && (
                 <TimelineContainer
                   data={timelineData}
+                  targetTime={Number(eventTime)}
                 />
               )}
             </>
@@ -337,22 +357,139 @@ const ExploreView = () => {
     );
   };
 
+// Define LoadingOverlay component here
+interface LoadingOverlayProps {
+  progress: LoadingProgress;
+}
+
+const LoadingOverlay = ({ progress }: LoadingOverlayProps) => {
+  let message = '';
+  let value = 0;
+
+  if (progress.stage === 'discovering') {
+    message = `Discovering streams... (${progress.discovered} found)`;
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', p: 4 }}>
+            <CircularProgress sx={{ mb: 2 }} />
+            <Typography variant="body1">{message}</Typography>
+        </Box>
+    );
+  } 
+  
+  if (progress.stage === 'timeline') {
+    message = `Fetching data for ${progress.total} streams...`;
+    if (progress.total > 0) {
+        value = (progress.timelineFetched / progress.total) * 100;
+    }
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', p: 4 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>{message}</Typography>
+            <Box sx={{ width: '80%', display: 'flex', alignItems: 'center' }}>
+                <Box sx={{ width: '100%', mr: 1 }}>
+                    <LinearProgress variant="determinate" value={value} />
+                </Box>
+                <Box sx={{ minWidth: 35 }}>
+                    <Typography variant="body2" color="text.secondary">{`${Math.round(value)}%`}</Typography>
+                </Box>
+            </Box>
+            <Typography variant="caption" sx={{ mt: 1 }}>{`${progress.timelineFetched} / ${progress.total}`}</Typography>
+        </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+      <CircularProgress />
+    </Box>
+  );
+};
+
 function App() {
+  const [activeView, setActiveView] = useState<'query' | 'explorer'>('query');
+  const [exploreParams, setExploreParams] = useState<QueryParams | null>(null);
+  const [streamLocator, setStreamLocator] = useState<StreamLocator | null>(null);
+
+  const { data: queryData, isLoading: queryIsLoading } = useStreamQuery(
+    activeView === 'query' ? exploreParams : null
+  );
+  
+  const explorerData = useStreamExplorer({
+    streamLocator: activeView === 'explorer' ? streamLocator : null,
+    targetTime: exploreParams?.to ?? 0,
+    level: 2,
+    mode: exploreParams?.mode || 'getRecord',
+    baseTime: exploreParams?.baseTime,
+    timeInterval: exploreParams?.timeInterval,
+  });
+
+  const handleQuerySubmit = (params: QueryParams) => {
+    setExploreParams(params);
+    setStreamLocator({
+      streamId: StreamId.fromString(params.streamId).throw(),
+      dataProvider: EthereumAddress.fromString(params.dataProvider).throw(),
+    });
+    setActiveView('explorer');
+  };
+
+  const handleBackToQuery = () => {
+    setStreamLocator(null);
+    setActiveView('query');
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom align="center">
-          TRUF.Network Values Explorer
-        </Typography>
-        <Typography variant="subtitle1" gutterBottom align="center" sx={{ mb: 4 }}>
-          Debug and explore Truf Network streams and their compositions
-        </Typography>
-        <Routes>
-          <Route path="/" element={<QueryView />} />
-          <Route path="/explore/:dataProvider/:streamId" element={<ExploreView />} />
-        </Routes>
-      </Container>
+      <TNClientProvider>
+        <QueryClientProvider client={queryClient}>
+          <Container sx={{ mt: 4 }}>
+            <Typography variant="h4" component="h1" gutterBottom>
+              TRUF.Network Values Explorer
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
+              Debug and explore Truf Network streams and their compositions
+            </Typography>
+            <Grid container spacing={4}>
+              <Grid item xs={12} md={4}>
+                <ConnectionManager />
+                <Box sx={{ mt: 2 }}>
+                  <QueryForm onSubmit={handleQuerySubmit} loading={queryIsLoading || explorerData.isLoading} initialParams={exploreParams} />
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={8}>
+                {activeView === 'query' && !queryIsLoading && (
+                  <ResultsTable data={queryData} />
+                )}
+                {activeView === 'explorer' && streamLocator && (
+                  explorerData.isLoading ? (
+                    <Box sx={{ height: '80vh', border: '1px solid #ddd', borderRadius: '4px' }}>
+                      <LoadingOverlay progress={explorerData.progress} />
+                    </Box>
+                  ) : explorerData.error ? (
+                    <Alert severity="error">{explorerData.error.message}</Alert>
+                  ) : (
+                    <Box>
+                      <ExplorePointView
+                        nodes={explorerData.nodes}
+                        edges={explorerData.edges}
+                        onBack={() => setActiveView('query')}
+                      />
+                      <Box sx={{ mt: 2 }}>
+                        <TimelineContainer
+                          data={explorerData.timelineData}
+                          targetTime={exploreParams!.to!}
+                        />
+                      </Box>
+                    </Box>
+                  )
+                )}
+                {(queryIsLoading && activeView === 'query') && (
+                  <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />
+                )}
+              </Grid>
+            </Grid>
+          </Container>
+        </QueryClientProvider>
+      </TNClientProvider>
     </ThemeProvider>
   );
 }
